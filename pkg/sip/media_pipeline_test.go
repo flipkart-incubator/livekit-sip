@@ -16,8 +16,11 @@ package sip
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"math"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -302,10 +305,17 @@ func (h *pipelineHarness) readRemotePacket(timeout time.Duration) (*rtp.Packet, 
 
 func (h *pipelineHarness) injectRTP(pkt *rtp.Packet) {
 	h.t.Helper()
+	require.NoError(h.t, h.writeRTP(pkt))
+}
+
+// writeRTP is safe to call from pump goroutines; it does not use the test T.
+func (h *pipelineHarness) writeRTP(pkt *rtp.Packet) error {
 	raw, err := pkt.Marshal()
-	require.NoError(h.t, err)
+	if err != nil {
+		return err
+	}
 	_, err = h.remote.WriteToUDPAddrPort(raw, h.local.addr)
-	require.NoError(h.t, err)
+	return err
 }
 
 func (h *pipelineHarness) injectAudio(ssrc uint32, seq uint16, ts uint32, pcm msdk.PCM16Sample) {
@@ -528,9 +538,10 @@ func TestMediaPipelineTeardownMultiSSRC(t *testing.T) {
 	h.injectAudio(0x22222222, 1, 160, sample)
 
 	require.Eventually(t, func() bool {
-		return h.ssrcCount.Load() >= 2
-	}, time.Second, 5*time.Millisecond, "expected AcceptStream for two SSRCs")
-	assert.Equal(t, h.packetCount.Load(), uint64(2))
+		return h.ssrcCount.Load() >= 2 && h.packetCount.Load() >= 2
+	}, time.Second, 5*time.Millisecond, "expected AcceptStream and HandleRTP for two SSRCs")
+	assert.Equal(t, uint64(2), h.ssrcCount.Load())
+	assert.Equal(t, uint64(2), h.packetCount.Load())
 
 	done := make(chan error, 1)
 	go func() {
@@ -541,6 +552,87 @@ func TestMediaPipelineTeardownMultiSSRC(t *testing.T) {
 		require.NoError(t, err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("pipeline.Close hung with multiple SSRCs")
+	}
+}
+
+func TestMediaPipelineConcurrentSSRCPump(t *testing.T) {
+	codec := audioCodecByName(t, g711.ULawSDPNameAndRate)
+	clock := codec.Info().RTPClockRate
+	if clock == 0 {
+		clock = codec.Info().SampleRate
+	}
+	tsStep := uint32(clock / int(time.Second/msrtp.DefFrameDur))
+
+	for _, nssrc := range []int{2, 3, 5} {
+		t.Run(fmt.Sprintf("%d_ssrcs", nssrc), func(t *testing.T) {
+			h := newPipelineHarness(t, RoomSampleRate)
+			h.configure(codec, testAudioPT(codec), testDTMFPT, false)
+
+			var encoded msrtp.Buffer
+			stream := msrtp.NewSeqWriter(&encoded).NewStream(h.audioPT, clock)
+			enc := msrtp.EncodePCM(stream, h.codec)
+			require.NoError(t, enc.WriteSample(h.codecFrame()))
+			require.NoError(t, enc.Close())
+			require.NotEmpty(t, encoded, "codec produced no RTP")
+			payload := slices.Clone(encoded[0].Payload)
+
+			stop := make(chan struct{})
+			var wg sync.WaitGroup
+			for i := range nssrc {
+				ssrc := uint32(0xA0000001 + i)
+				wg.Go(func() {
+					seq := uint16(1)
+					ts := tsStep
+					for {
+						pkt := &rtp.Packet{
+							Header: rtp.Header{
+								Version:        2,
+								PayloadType:    h.audioPT,
+								SequenceNumber: seq,
+								Timestamp:      ts,
+								SSRC:           ssrc,
+							},
+							Payload: payload,
+						}
+						err := h.writeRTP(pkt)
+						if errors.Is(err, io.ErrClosedPipe) {
+							return
+						}
+						if err != nil {
+							runtime.Gosched()
+						} else {
+							seq++
+							ts += tsStep
+						}
+						select {
+						case <-stop:
+							return
+						default:
+						}
+					}
+				})
+			}
+
+			require.Eventually(t, func() bool {
+				return h.ssrcCount.Load() >= uint64(nssrc) && h.packetCount.Load() >= 50
+			}, 5*time.Second, time.Millisecond, "expected %d SSRCs and at least 50 packets", nssrc)
+
+			done := make(chan error, 1)
+			go func() {
+				done <- h.pipeline.Close()
+			}()
+			select {
+			case err := <-done:
+				require.NoError(t, err)
+			case <-time.After(2 * time.Second):
+				t.Fatal("pipeline.Close hung under concurrent SSRC pumps")
+			}
+			close(stop)
+			wg.Wait()
+
+			assert.Equal(t, uint64(nssrc), h.ssrcCount.Load())
+			assert.Greater(t, h.roomAudio.len(), 0, "decoded PCM should reach the room")
+		})
 	}
 }
 
