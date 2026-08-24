@@ -104,6 +104,12 @@ func (c *dtmfCollector) String() string {
 	return res
 }
 
+func (c *dtmfCollector) Events() []*livekit.SipDTMF {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.events
+}
+
 func (c *dtmfCollector) SampleRate() int { return dtmf.SampleRate }
 
 func (c *dtmfCollector) Close() error { return nil }
@@ -616,7 +622,7 @@ func TestMediaPipelineDTMF(t *testing.T) {
 			t.Run(fmt.Sprintf("digits=%s/loss=%s", digits, lossPackets), func(t *testing.T) {
 				got := &dtmfCollector{}
 				p := &mediaPortPipeline{dtmfHandler: got}
-				p.lastDTMFTimestamp.Store(math.MaxUint32)
+				p.lastDTMFEvent.Store(math.MaxUint64)
 				for _, digitPackets := range packets {
 					sendPackets := dropPackets(t, lossPackets, digitPackets)
 					t.Logf("sending %d/%d packets", len(sendPackets), len(digitPackets))
@@ -632,4 +638,41 @@ func TestMediaPipelineDTMF(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestMediaPortDTMFSameTimestamp(t *testing.T) {
+	// Some SIP carriers reuse the RTP timestamp across different DTMF digits.
+	// Verify that each distinct event code is still reported even when
+	// timestamps are shared.
+	got := &dtmfCollector{}
+	p := &mediaPortPipeline{dtmfHandler: got}
+	p.lastDTMFEvent.Store(math.MaxUint64)
+
+	// Three different digits, all with the same timestamp (non-standard but seen in production).
+	sameTS := uint32(100000)
+	// Use digit characters so we go through dtmf.Write which produces proper DTMF packets.
+	digits := "123"
+
+	for i := range digits {
+		var buf msrtp.Buffer
+		w := msrtp.NewSeqWriter(&buf).NewStream(101, dtmf.SampleRate)
+		err := dtmf.Write(context.Background(), nil, w, sameTS, digits[i:i+1])
+		require.NoError(t, err)
+		require.NotEmpty(t, buf)
+		// Take the first packet of each digit and send to handler.
+		// All packets share the same timestamp, simulating the bug scenario.
+		pkt := buf[0]
+		h := pkt.Header
+		require.NoError(t, p.handleEventRTP(&h, pkt.Payload))
+	}
+
+	var codes []byte
+	for _, event := range got.Events() {
+		codes = append(codes, byte(event.Code))
+	}
+
+	require.Equal(t, 3, len(codes))
+	require.NotEqual(t, codes[0], codes[1])
+	require.NotEqual(t, codes[1], codes[2])
+	require.NotEqual(t, codes[0], codes[2])
 }

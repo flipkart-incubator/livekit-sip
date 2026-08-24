@@ -72,19 +72,19 @@ type mediaPortPipeline struct {
 	conf *MediaPortPipelineConfig // Expected to be owned by caller, not managed
 
 	// Owned by pipeline
-	ctx               context.Context
-	cancel            context.CancelFunc
-	sess              rtp.Session
-	rtpLoopWG         sync.WaitGroup
-	muxToRoom         atomic.Pointer[rtp.HandlerCloser]
-	dtmfMixer         *mixer.Mixer
-	audioToRoom       rtp.HandlerCloser
-	dtmfToRoom        rtp.HandlerCloser
-	dtmfHandler       msdk.WriteCloser[*livekit.SipDTMF] // Reference, not closed
-	audioToPort       msdk.PCM16Writer                   // post-mixer chain towards port
-	mixerToPort       msdk.PCM16Writer                   // Reference, not closed
-	dtmfToPort        msdk.WriteCloser[*livekit.SipDTMF]
-	lastDTMFTimestamp atomic.Uint32 // rtp timestamp of last DTMF packet seen
+	ctx           context.Context
+	cancel        context.CancelFunc
+	sess          rtp.Session
+	rtpLoopWG     sync.WaitGroup
+	muxToRoom     atomic.Pointer[rtp.HandlerCloser]
+	dtmfMixer     *mixer.Mixer
+	audioToRoom   rtp.HandlerCloser
+	dtmfToRoom    rtp.HandlerCloser
+	dtmfHandler   msdk.WriteCloser[*livekit.SipDTMF] // Reference, not closed
+	audioToPort   msdk.PCM16Writer                   // post-mixer chain towards port
+	mixerToPort   msdk.PCM16Writer                   // Reference, not closed
+	dtmfToPort    msdk.WriteCloser[*livekit.SipDTMF]
+	lastDTMFEvent atomic.Uint64 // composite (timestamp, event code) of last DTMF packet seen
 }
 
 // Returns insulated (nopCloser) connectors, preventing anchor close from closing pipeline.
@@ -129,7 +129,7 @@ func (p *mediaPortPipeline) init(
 	if p.conf.opts.IgnoreLocalAddrInSDP && mc.Remote.Addr().IsPrivate() {
 		port.SetSymmetric(true) // Already initialized with opts, turn on for edge case
 	}
-	p.lastDTMFTimestamp.Store(math.MaxUint32)
+	p.lastDTMFEvent.Store(math.MaxUint64)
 
 	var err error
 	if mc.Crypto != nil {
@@ -211,16 +211,19 @@ func (p *mediaPortPipeline) setupInput(mc *sdp.MediaConfig, audioToRoom msdk.PCM
 
 // Processes an incoming telephony-event packet, turns into SipDTMF, and forwards it.
 func (p *mediaPortPipeline) handleEventRTP(h *rtp.Header, payload []byte) error {
-	// RFC 4733 requires all packets of a given digit to share identical timestamps.
-	// The marker bit could be used instead, but it is prone to occasional loss.
-	if h.Timestamp == p.lastDTMFTimestamp.Load() {
-		return nil
-	}
 	ev, err := dtmf.Decode(payload)
 	if err != nil {
 		return nil
 	}
-	p.lastDTMFTimestamp.Store(h.Timestamp)
+	// RFC 4733 requires all packets of a given digit to share identical timestamps.
+	// Some SIP devices or carriers may reuse the timestamp of the previous digit
+	// for the next one, so we combine timestamp and event code for deduplication.
+	// The marker bit could be used instead, but it is prone to occasional loss.
+	eventID := uint64(h.Timestamp)<<8 | uint64(ev.Code)
+	if eventID == p.lastDTMFEvent.Load() {
+		return nil
+	}
+	p.lastDTMFEvent.Store(eventID)
 	return p.dtmfHandler.WriteSample(&livekit.SipDTMF{
 		Code:  uint32(ev.Code),
 		Digit: string([]byte{ev.Digit}),
