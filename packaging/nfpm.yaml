@@ -1,0 +1,31 @@
+name: livekit-sip
+arch: amd64
+platform: linux
+version: 0.0.0-dev
+release: "1"
+section: net
+priority: optional
+maintainer: LiveKit <hello@livekit.io>
+description: LiveKit SIP gateway
+contents:
+  - src: livekit-sip
+    dst: /usr/bin/livekit-sip
+    file_info:
+      mode: 0755
+  - src: livekit-sip.service
+    dst: /lib/systemd/system/livekit-sip.service
+    file_info:
+      mode: 0644
+  - src: livekit-sip.yaml.example
+    dst: /etc/livekit-sip/config.yaml
+    type: config|noreplace
+    file_info:
+      mode: 0640
+scripts:
+  postinstall: postinstall.sh
+  preremove: preremove.sh
+depends:
+  - libc6
+  - libopus0
+  - libopusfile0
+  - libsoxr0

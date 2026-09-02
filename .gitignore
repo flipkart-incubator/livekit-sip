@@ -1,6 +1,9 @@
 .DS_Store
 .idea/
 bin/
+dist/
+packaging/livekit-sip
+packaging/nfpm.gen.yaml
 cmd/server/server
 
 test/config.yaml
