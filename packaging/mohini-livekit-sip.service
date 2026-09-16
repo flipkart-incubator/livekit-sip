@@ -1,13 +1,13 @@
 [Unit]
-Description=LiveKit SIP
+Description=Mohini LiveKit SIP
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=livekit-sip
-Group=livekit-sip
-ExecStart=/usr/bin/livekit-sip --config /etc/livekit-sip/config.yaml
+User=mohini-livekit-sip
+Group=mohini-livekit-sip
+ExecStart=/usr/bin/mohini-livekit-sip --config /etc/mohini-livekit-sip/config.yaml
 Restart=on-failure
 RestartSec=2
 LimitNOFILE=65536

@@ -1,4 +1,4 @@
-# /etc/livekit-sip/config.yaml
+# /etc/mohini-livekit-sip/config.yaml
 api_key: <your-api-key>
 api_secret: <your-api-secret>
 ws_url: ws://localhost:7880

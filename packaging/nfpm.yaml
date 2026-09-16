@@ -1,4 +1,4 @@
-name: livekit-sip
+name: mohini-livekit-sip
 arch: amd64
 platform: linux
 version: 0.0.0-dev
@@ -9,15 +9,15 @@ maintainer: LiveKit <hello@livekit.io>
 description: LiveKit SIP gateway
 contents:
   - src: livekit-sip
-    dst: /usr/bin/livekit-sip
+    dst: /usr/bin/mohini-livekit-sip
     file_info:
       mode: 0755
-  - src: livekit-sip.service
-    dst: /lib/systemd/system/livekit-sip.service
+  - src: mohini-livekit-sip.service
+    dst: /lib/systemd/system/mohini-livekit-sip.service
     file_info:
       mode: 0644
   - src: livekit-sip.yaml.example
-    dst: /etc/livekit-sip/config.yaml
+    dst: /etc/mohini-livekit-sip/config.yaml
     type: config|noreplace
     file_info:
       mode: 0640
