@@ -17,6 +17,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pion/webrtc/v4"
 
@@ -64,5 +65,11 @@ func (c *Config) ICEConnectOptions() []lksdk.ConnectOption {
 	if len(types) == 0 {
 		return nil
 	}
-	return []lksdk.ConnectOption{lksdk.WithICENetworkTypes(types...)}
+	// LiveKit server delay-queues the last ICE candidate until gathering
+	// completes. Host TCP is last before STUN, so a 5s connect timeout
+	// disconnects before the tcp4 trickle is flushed.
+	return []lksdk.ConnectOption{
+		lksdk.WithICENetworkTypes(types...),
+		lksdk.WithConnectTimeout(20 * time.Second),
+	}
 }

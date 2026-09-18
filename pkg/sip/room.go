@@ -393,6 +393,11 @@ func (r *Room) Connect(ctx context.Context, conf *config.Config, rconf RoomConfi
 		lksdk.WithExtraAttributes(partConf.Attributes),
 	}
 	joinOpts = append(joinOpts, conf.ICEConnectOptions()...)
+	mode := conf.ICETCP
+	if mode == "" {
+		mode = "udp"
+	}
+	r.log.Infow("ICE to SFU", "ice_tcp", mode)
 	err := room.JoinWithContextAndToken(ctx, rconf.WsUrl, rconf.Token, joinOpts...)
 	if err != nil {
 		return err

@@ -227,6 +227,11 @@ func (c *Config) Init() error {
 	if err := c.normalizeICETCP(); err != nil {
 		return err
 	}
+	mode := c.ICETCP
+	if mode == "" {
+		mode = "udp"
+	}
+	logger.Infow("ICE to SFU", "ice_tcp", mode)
 
 	return nil
 }

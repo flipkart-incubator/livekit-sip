@@ -54,7 +54,7 @@ func TestICENetworkTypes(t *testing.T) {
 	}, force)
 
 	require.Nil(t, (&Config{}).ICEConnectOptions())
-	require.Len(t, (&Config{ICETCP: ICETCPFallback}).ICEConnectOptions(), 1)
+	require.Len(t, (&Config{ICETCP: ICETCPFallback}).ICEConnectOptions(), 2)
 }
 
 func TestICETCPYAML(t *testing.T) {

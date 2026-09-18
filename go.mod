@@ -144,4 +144,4 @@ require (
 )
 
 // Fork of server-sdk-go with WithICENetworkTypes (ICE-TCP). Drop when upstream has it.
-replace github.com/livekit/server-sdk-go/v2 => github.com/punitpandey/server-sdk-go/v2 v2.18.2-0.20260901160400-6c47e01014a2
+replace github.com/livekit/server-sdk-go/v2 => github.com/punitpandey/server-sdk-go/v2 v2.18.2-0.20260902231933-261a3ecc1278
