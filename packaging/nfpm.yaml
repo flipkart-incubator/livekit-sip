@@ -8,7 +8,7 @@ priority: optional
 maintainer: LiveKit <hello@livekit.io>
 description: LiveKit SIP gateway
 contents:
-  - src: livekit-sip
+  - src: ../livekit-sip
     dst: /usr/bin/mohini-livekit-sip
     file_info:
       mode: 0755
