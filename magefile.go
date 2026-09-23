@@ -101,7 +101,7 @@ func SipClient() error {
 	return run("go build -C ./test/sip-client/ ./...")
 }
 
-// Deb packages an existing linux binary into dist/livekit-sip_<ver>_<arch>.deb.
+// Deb packages an existing linux binary into dist/mohini-livekit-sip_<ver>_<arch>.deb.
 // Requires nfpm (https://nfpm.goreleaser.com). Does not build the binary.
 //
 //	SIP_BIN=bin/livekit-sip-linux-amd64 mage Deb
@@ -144,7 +144,7 @@ func Deb() error {
 	if err := os.MkdirAll("dist", 0o755); err != nil {
 		return err
 	}
-	out, err := filepath.Abs(fmt.Sprintf("dist/livekit-sip_%s_%s.deb", version, arch))
+	out, err := filepath.Abs(fmt.Sprintf("dist/mohini-livekit-sip_%s_%s.deb", version, arch))
 	if err != nil {
 		return err
 	}
