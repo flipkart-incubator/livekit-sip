@@ -260,22 +260,16 @@ func sendBye(ctx context.Context, log logger.Logger, c Signaling, req *sip.Reque
 // Handles formats like <sip:user@host:port> or sip:user@host:port.
 func parseReferToUri(referToUrl string) (*sip.Uri, error) {
 	uriStr := strings.TrimSpace(referToUrl)
-	fmt.Printf("DEBUG parseReferToUri: input=%q, after trim=%q\n", referToUrl, uriStr)
-
 	// Remove angle brackets if present
 	if n := len(uriStr); n > 0 && uriStr[0] == '<' && uriStr[n-1] == '>' {
 		uriStr = uriStr[1 : n-1]
-		fmt.Printf("DEBUG parseReferToUri: after bracket removal=%q\n", uriStr)
 	}
 
 	// Create URI struct and parse using emiago/sipgo's ParseUri
 	uri := &sip.Uri{Scheme: "sip"}
-	fmt.Printf("DEBUG parseReferToUri: calling esip.ParseUri with %q\n", uriStr)
 	if err := esip.ParseUri(uriStr, uri); err != nil {
-		fmt.Printf("DEBUG parseReferToUri: ParseUri failed with error: %v\n", err)
 		return nil, fmt.Errorf("failed to parse refer-to URI %q: %w", referToUrl, err)
 	}
-	fmt.Printf("DEBUG parseReferToUri: ParseUri succeeded, uri.Host=%q, uri.Port=%d, uri.User=%q\n", uri.Host, uri.Port, uri.User)
 	return uri, nil
 }
 
@@ -287,7 +281,7 @@ func NewReferRequest(inviteRequest *sip.Request, inviteResponse *sip.Response, c
 	if referToUrl != "" {
 		if uri, err := parseReferToUri(referToUrl); err == nil {
 			recipient = *uri
-			fmt.Printf("DEBUG: Successfully parsed referToUrl to recipient=%s:%d, user=%q\n", recipient.Host, recipient.Port, recipient.User)
+			fmt.Printf("DEBUG: Successfully parsed referToUrl to recipient=%s:%d\n", recipient.Host, recipient.Port)
 		} else {
 			// Log parsing error for debugging but fall back to Asterisk
 			fmt.Printf("DEBUG: Failed to parse referToUrl %q: %v\n", referToUrl, err)
@@ -296,9 +290,7 @@ func NewReferRequest(inviteRequest *sip.Request, inviteResponse *sip.Response, c
 		fmt.Printf("DEBUG: referToUrl is empty, using inviteRequest.Recipient\n")
 	}
 
-	fmt.Printf("DEBUG: About to create REFER request with recipient=%s:%d, user=%q\n", recipient.Host, recipient.Port, recipient.User)
 	req := sip.NewRequest(sip.REFER, recipient)
-	fmt.Printf("DEBUG: Created REFER request, req.Recipient=%s\n", req.Recipient)
 
 	req.SipVersion = inviteRequest.SipVersion
 	sip.CopyHeaders("Via", inviteRequest, req)
