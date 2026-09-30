@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	esip "github.com/emiago/sipgo/sip"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/psrpc"
@@ -256,33 +255,8 @@ func sendBye(ctx context.Context, log logger.Logger, c Signaling, req *sip.Reque
 	}
 }
 
-// parseReferToUri parses a Refer-To URI string into a sip.Uri for REFER recipient.
-// Handles formats like <sip:user@host:port> or sip:user@host:port.
-func parseReferToUri(referToUrl string) (*sip.Uri, error) {
-	uriStr := strings.TrimSpace(referToUrl)
-	// Remove angle brackets if present
-	if n := len(uriStr); n > 0 && uriStr[0] == '<' && uriStr[n-1] == '>' {
-		uriStr = uriStr[1 : n-1]
-	}
-
-	// Create URI struct and parse using emiago/sipgo's ParseUri
-	uri := &sip.Uri{Scheme: "sip"}
-	if err := esip.ParseUri(uriStr, uri); err != nil {
-		return nil, fmt.Errorf("failed to parse refer-to URI %q: %w", referToUrl, err)
-	}
-	return uri, nil
-}
-
 func NewReferRequest(inviteRequest *sip.Request, inviteResponse *sip.Response, contactHeader *sip.ContactHeader, referToUrl string, headers map[string]string) *sip.Request {
-	// Try to use actual transfer destination from referToUrl
-	recipient := inviteRequest.Recipient
-	if referToUrl != "" {
-		if uri, err := parseReferToUri(referToUrl); err == nil {
-			recipient = *uri
-		}
-	}
-
-	req := sip.NewRequest(sip.REFER, recipient)
+	req := sip.NewRequest(sip.REFER, inviteRequest.Recipient)
 
 	req.SipVersion = inviteRequest.SipVersion
 	sip.CopyHeaders("Via", inviteRequest, req)
@@ -292,10 +266,20 @@ func NewReferRequest(inviteRequest *sip.Request, inviteResponse *sip.Response, c
 	viaHop.Params.Add("branch", sip.GenerateBranch())
 	// }
 
-	// Don't copy Route or Record-Route headers for REFER.
-	// These would force the REFER back through intermediate proxies,
-	// defeating the purpose of sending REFER directly to the transfer destination.
-	// REFER should route directly to recipient without proxies in the path.
+	if len(inviteRequest.GetHeaders("Route")) > 0 {
+		sip.CopyHeaders("Route", inviteRequest, req)
+	} else {
+		hdrs := inviteResponse.GetHeaders("Record-Route")
+		for i := len(hdrs) - 1; i >= 0; i-- {
+			rrh, ok := hdrs[i].(*sip.RecordRouteHeader)
+			if !ok {
+				continue
+			}
+
+			h := rrh.Clone()
+			req.AppendHeader(h)
+		}
+	}
 
 	maxForwardsHeader := sip.MaxForwardsHeader(70)
 	req.AppendHeader(&maxForwardsHeader)
