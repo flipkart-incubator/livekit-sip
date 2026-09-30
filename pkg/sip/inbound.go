@@ -2206,30 +2206,24 @@ func (c *sipInbound) newReferReq(transferTo string, headers map[string]string) (
 	}
 	headers = c.fillHeaders(headers)
 
-	// Create REFER request to transfer destination (not swapped)
-	// For blind transfer, REFER is sent within the existing dialog to initiate transfer at remote party
+	// Create REFER request to transfer destination
 	req := NewReferRequest(c.invite, c.inviteOk, c.contact, transferTo, headers)
 	c.setCSeq(req)
 
-	// For REFER to third-party transfer destination, we need proper headers but NOT reversed:
-	// - From: should be the call initiator (keep original)
-	// - To: should be the remote party (keep original)
-	// - Via: generate fresh via header
-	// - Request-URI: transfer destination (already set by NewReferRequest)
+	// Save the parsed transfer destination before swapSrcDst overwrites it
+	transferDestRecipient := req.Recipient
 
-	// Remove all Via headers and add a fresh one
-	for req.RemoveHeader("Via") {
-	}
-	req.PrependHeader(c.generateViaHeader(req))
+	// swapSrcDst sets up critical headers (From/To swap for dialog, Via, transport)
+	// but it also overwrites Recipient with contact address. We'll restore it after.
+	c.swapSrcDst(req)
 
-	// Set source and destination for transport
-	req.SetSource(c.inviteOk.Source())
-	// SetDestination will be set to transfer destination's address
-	// (NewReferRequest already uses parsed transfer destination as req.Recipient)
-	if req.Recipient.Port == 0 {
-		req.Recipient.Port = 5060
+	// Restore the parsed transfer destination as REFER recipient
+	// (swapSrcDst overwrites it with inviteRequest.Contact)
+	req.Recipient = transferDestRecipient
+	if transferDestRecipient.Port == 0 {
+		transferDestRecipient.Port = 5060
 	}
-	req.SetDestination(fmt.Sprintf("%s:%d", req.Recipient.Host, req.Recipient.Port))
+	req.SetDestination(fmt.Sprintf("%s:%d", transferDestRecipient.Host, transferDestRecipient.Port))
 
 	cseq := req.CSeq()
 	if cseq == nil {
