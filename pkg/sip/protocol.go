@@ -279,9 +279,6 @@ func NewReferRequest(inviteRequest *sip.Request, inviteResponse *sip.Response, c
 	if referToUrl != "" {
 		if uri, err := parseReferToUri(referToUrl); err == nil {
 			recipient = *uri
-		} else {
-			// Log parsing error for debugging but fall back to Asterisk
-			fmt.Printf("DEBUG: Failed to parse referToUrl %q: %v\n", referToUrl, err)
 		}
 	}
 
@@ -332,12 +329,7 @@ func NewReferRequest(inviteRequest *sip.Request, inviteResponse *sip.Response, c
 
 	req.SetTransport(inviteRequest.Transport())
 	req.SetSource(inviteRequest.Source())
-	// Set destination based on the actual REFER recipient (transfer destination or Asterisk fallback)
-	// NOT the original invite's destination, which would override our parsed recipient
-	if recipient.Port == 0 {
-		recipient.Port = 5060 // Default SIP port if not specified
-	}
-	req.SetDestination(fmt.Sprintf("%s:%d", recipient.Host, recipient.Port))
+	req.SetDestination(inviteRequest.Destination())
 
 	for k, v := range headers {
 		req.AppendHeader(sip.NewHeader(k, v))
