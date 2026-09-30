@@ -29,6 +29,7 @@ import (
 	"github.com/livekit/psrpc"
 	"github.com/livekit/sip/pkg/stats"
 	"github.com/livekit/sipgo/sip"
+	esip "github.com/emiago/sipgo/sip"
 
 	"github.com/livekit/sip/pkg/config"
 )
@@ -255,8 +256,36 @@ func sendBye(ctx context.Context, log logger.Logger, c Signaling, req *sip.Reque
 	}
 }
 
+// parseReferToUri parses a Refer-To URI string into a sip.Uri for REFER recipient.
+// Handles formats like <sip:user@host:port> or sip:user@host:port.
+func parseReferToUri(referToUrl string) (*sip.Uri, error) {
+	uriStr := strings.TrimSpace(referToUrl)
+	// Remove angle brackets if present
+	if n := len(uriStr); n > 0 && uriStr[0] == '<' && uriStr[n-1] == '>' {
+		uriStr = uriStr[1 : n-1]
+	}
+
+	// Create URI struct and parse using emiago/sipgo's ParseUri
+	uri := &sip.Uri{Scheme: "sip"}
+	if err := esip.ParseUri(uriStr, uri); err != nil {
+		return nil, fmt.Errorf("failed to parse refer-to URI %q: %w", referToUrl, err)
+	}
+	return uri, nil
+}
+
 func NewReferRequest(inviteRequest *sip.Request, inviteResponse *sip.Response, contactHeader *sip.ContactHeader, referToUrl string, headers map[string]string) *sip.Request {
-	req := sip.NewRequest(sip.REFER, inviteRequest.Recipient)
+	// Send REFER to the actual transfer destination, not back to inviteRequest.Recipient (Asterisk B2BUA)
+	recipient := inviteRequest.Recipient // fallback
+
+	if referToUrl != "" {
+		// Try to parse referToUrl as a SIP URI and use actual destination as recipient
+		if uri, err := parseReferToUri(referToUrl); err == nil {
+			recipient = *uri
+		}
+		// On parse error, fall back to sending to inviteRequest.Recipient (Asterisk)
+	}
+
+	req := sip.NewRequest(sip.REFER, recipient)
 
 	req.SipVersion = inviteRequest.SipVersion
 	sip.CopyHeaders("Via", inviteRequest, req)
