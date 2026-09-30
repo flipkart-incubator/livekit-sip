@@ -2206,10 +2206,30 @@ func (c *sipInbound) newReferReq(transferTo string, headers map[string]string) (
 	}
 	headers = c.fillHeaders(headers)
 
-	// This will effectively redirect future SIP requests to this server instance (if host address is not LB).
+	// Create REFER request to transfer destination (not swapped)
+	// For blind transfer, REFER is sent within the existing dialog to initiate transfer at remote party
 	req := NewReferRequest(c.invite, c.inviteOk, c.contact, transferTo, headers)
 	c.setCSeq(req)
-	c.swapSrcDst(req)
+
+	// For REFER to third-party transfer destination, we need proper headers but NOT reversed:
+	// - From: should be the call initiator (keep original)
+	// - To: should be the remote party (keep original)
+	// - Via: generate fresh via header
+	// - Request-URI: transfer destination (already set by NewReferRequest)
+
+	// Remove all Via headers and add a fresh one
+	for req.RemoveHeader("Via") {
+	}
+	req.PrependHeader(c.generateViaHeader(req))
+
+	// Set source and destination for transport
+	req.SetSource(c.inviteOk.Source())
+	// SetDestination will be set to transfer destination's address
+	// (NewReferRequest already uses parsed transfer destination as req.Recipient)
+	if req.Recipient.Port == 0 {
+		req.Recipient.Port = 5060
+	}
+	req.SetDestination(fmt.Sprintf("%s:%d", req.Recipient.Host, req.Recipient.Port))
 
 	cseq := req.CSeq()
 	if cseq == nil {
