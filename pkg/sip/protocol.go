@@ -276,18 +276,13 @@ func parseReferToUri(referToUrl string) (*sip.Uri, error) {
 func NewReferRequest(inviteRequest *sip.Request, inviteResponse *sip.Response, contactHeader *sip.ContactHeader, referToUrl string, headers map[string]string) *sip.Request {
 	// Try to use actual transfer destination from referToUrl
 	recipient := inviteRequest.Recipient
-	fmt.Printf("DEBUG NewReferRequest: referToUrl=%q, inviteRequest.Recipient=%s:%d\n", referToUrl, inviteRequest.Recipient.Host, inviteRequest.Recipient.Port)
-
 	if referToUrl != "" {
 		if uri, err := parseReferToUri(referToUrl); err == nil {
 			recipient = *uri
-			fmt.Printf("DEBUG: Successfully parsed referToUrl to recipient=%s:%d\n", recipient.Host, recipient.Port)
 		} else {
 			// Log parsing error for debugging but fall back to Asterisk
 			fmt.Printf("DEBUG: Failed to parse referToUrl %q: %v\n", referToUrl, err)
 		}
-	} else {
-		fmt.Printf("DEBUG: referToUrl is empty, using inviteRequest.Recipient\n")
 	}
 
 	req := sip.NewRequest(sip.REFER, recipient)
