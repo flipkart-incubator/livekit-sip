@@ -1,12 +1,12 @@
 name: mohini-livekit-sip
 arch: amd64
 platform: linux
-version: 1.0.0
+version: 0.0.0-dev
 release: "1"
 section: net
 priority: optional
-maintainer: ai-solutions <mohini-oncall@flipkart.com>
-description: Mohini LiveKit SIP gateway
+maintainer: LiveKit <hello@livekit.io>
+description: LiveKit SIP gateway
 contents:
   - src: ../livekit-sip
     dst: /usr/bin/mohini-livekit-sip
