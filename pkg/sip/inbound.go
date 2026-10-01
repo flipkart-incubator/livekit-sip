@@ -2206,24 +2206,10 @@ func (c *sipInbound) newReferReq(transferTo string, headers map[string]string) (
 	}
 	headers = c.fillHeaders(headers)
 
-	// Create REFER request to transfer destination
+	// This will effectively redirect future SIP requests to this server instance (if host address is not LB).
 	req := NewReferRequest(c.invite, c.inviteOk, c.contact, transferTo, headers)
 	c.setCSeq(req)
-
-	// Save the parsed transfer destination before swapSrcDst overwrites it
-	transferDestRecipient := req.Recipient
-
-	// swapSrcDst sets up critical headers (From/To swap for dialog, Via, transport)
-	// but it also overwrites Recipient with contact address. We'll restore it after.
 	c.swapSrcDst(req)
-
-	// Restore the parsed transfer destination as REFER recipient
-	// (swapSrcDst overwrites it with inviteRequest.Contact)
-	req.Recipient = transferDestRecipient
-	if transferDestRecipient.Port == 0 {
-		transferDestRecipient.Port = 5060
-	}
-	req.SetDestination(fmt.Sprintf("%s:%d", transferDestRecipient.Host, transferDestRecipient.Port))
 
 	cseq := req.CSeq()
 	if cseq == nil {

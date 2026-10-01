@@ -29,7 +29,6 @@ import (
 	"github.com/livekit/psrpc"
 	"github.com/livekit/sip/pkg/stats"
 	"github.com/livekit/sipgo/sip"
-	esip "github.com/emiago/sipgo/sip"
 
 	"github.com/livekit/sip/pkg/config"
 )
@@ -256,31 +255,8 @@ func sendBye(ctx context.Context, log logger.Logger, c Signaling, req *sip.Reque
 	}
 }
 
-// parseReferToUri extracts the transfer destination from Refer-To header value
-func parseReferToUri(referToUrl string) (sip.Uri, error) {
-	uriStr := strings.TrimSpace(referToUrl)
-	// Remove angle brackets <sip:...>
-	if len(uriStr) > 0 && uriStr[0] == '<' && uriStr[len(uriStr)-1] == '>' {
-		uriStr = uriStr[1 : len(uriStr)-1]
-	}
-	// Parse using sipgo's URI parser
-	var uri sip.Uri
-	if err := esip.ParseUri(uriStr, &uri); err != nil {
-		return uri, fmt.Errorf("failed to parse transfer destination %q: %w", referToUrl, err)
-	}
-	return uri, nil
-}
-
 func NewReferRequest(inviteRequest *sip.Request, inviteResponse *sip.Response, contactHeader *sip.ContactHeader, referToUrl string, headers map[string]string) *sip.Request {
-	// Parse transfer destination from Refer-To header and use as REFER recipient
-	recipient := inviteRequest.Recipient // fallback
-	if referToUrl != "" {
-		if uri, err := parseReferToUri(referToUrl); err == nil {
-			recipient = uri
-		}
-	}
-
-	req := sip.NewRequest(sip.REFER, recipient)
+	req := sip.NewRequest(sip.REFER, inviteRequest.Recipient)
 
 	req.SipVersion = inviteRequest.SipVersion
 	sip.CopyHeaders("Via", inviteRequest, req)
